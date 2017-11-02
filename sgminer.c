@@ -9310,7 +9310,7 @@ int main(int argc, char *argv[])
     /* Look for at least one active pool before starting */
     probe_pools();
     do {
-      sleep(0.2);
+      sleep(1);
       slept++;
     } while (total_pools > 0 && !pools_active && slept < 300);
     if (!pools_active) {

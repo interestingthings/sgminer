@@ -1673,6 +1673,9 @@ void write_config(const char *filename)
     case POOL_ROTATE:
       json_add(config, "rotate", json_sprintf("%d", opt_rotate_period));
       break;
+        case POOL_NORETRY:
+        json_add(config, "no-retry", json_true());
+        break;
     //default failover only
     default:
       json_add(config, "failover-only", json_true());
@@ -2318,4 +2321,3 @@ void update_config_rawintensity(struct profile *profile)
     default_profile.rawintensity = strdup((const char *)buf);
   }
 }
-

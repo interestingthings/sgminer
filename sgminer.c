@@ -270,6 +270,7 @@ struct strategies strategies[] = {
   { "Rotate" },
   { "Load Balance" },
   { "Balance" },
+  { "No Retry" }
 };
 
 int total_pools, enabled_pools;
@@ -754,6 +755,12 @@ static char *set_rotate(const char *arg, int *i)
 {
   pool_strategy = POOL_ROTATE;
   return set_int_range(arg, i, 0, 9999);
+}
+
+static char *set_no_retry(enum pool_strategy *strategy)
+{
+  *strategy = POOL_NORETRY;
+  return NULL;
 }
 
 static char *set_rr(enum pool_strategy *strategy)
@@ -1589,6 +1596,9 @@ struct opt_table opt_config_table[] = {
   OPT_WITHOUT_ARG("--no-extranonce|--pool-no-extranonce",
       set_no_extranonce_subscribe, NULL,
       "Disable 'extranonce' stratum subscribe for pool"),
+  OPT_WITHOUT_ARG("--no-retry",
+      set_no_retry, &pool_strategy,
+      "Change multipool strategy from failover to no retry. (Quit program when failed at first pool connection attempt)"),
   OPT_WITH_ARG("--pass|--pool-pass|-p",
       set_pass, NULL, NULL,
       "Password for bitcoin JSON-RPC server"),
@@ -4326,6 +4336,8 @@ void __switch_pools(struct pool *selected, bool saveprio)
         break;
       }
       break;
+        case POOL_NORETRY:
+          break;
     default:
       break;
   }
@@ -4356,6 +4368,10 @@ void __switch_pools(struct pool *selected, bool saveprio)
   if(startup) {
     startup = false;  //remove startup flag so we don't enter this block again
     applog(LOG_NOTICE, "Startup GPU initialization... Using settings from pool %s.", get_pool_name(pool));
+
+      if (pool_strategy == POOL_NORETRY) {
+        goto out;
+      }
 
     //set initial pool number for restart_mining_threads to prevent mismatched GPU settings
     init_pool = pool->pool_no;
@@ -8418,6 +8434,9 @@ static void *test_pool_thread(void *arg)
     switch_pools(NULL);
   } else {
     pool_died(pool);
+      if (pool_strategy == POOL_NORETRY) {
+        remove_pool(pool);
+      }
   }
 
   return NULL;
@@ -9292,11 +9311,13 @@ int main(int argc, char *argv[])
     /* Look for at least one active pool before starting */
     probe_pools();
     do {
-      sleep(1);
+      sleep(0.2);
       slept++;
-    } while (!pools_active && slept < 60);
-
+    } while (total_pools > 0 && !pools_active && slept < 300);
     if (!pools_active) {
+        if (pool_strategy == POOL_NORETRY) {
+          quit(0, "No servers could be used! Exiting. (Pool no retry)");
+        }
       applog(LOG_ERR, "No servers were found that could be used to get work from.");
       applog(LOG_ERR, "Please check the details from the list below of the servers you have input");
       applog(LOG_ERR, "Most likely you have input the wrong URL, forgotten to add a port, or have not set up workers");
@@ -9451,6 +9472,9 @@ int main(int argc, char *argv[])
 retry:
     if (pool->has_stratum) {
       while (!pool->stratum_active || !pool->stratum_notify) {
+        if (pool_strategy == POOL_NORETRY) {
+          quit(0, "No servers could be used! Exiting. (Pool no retry)");
+        }
         struct pool *altpool = select_pool(true);
 
         cgsleep_ms(5000);

@@ -4369,10 +4369,6 @@ void __switch_pools(struct pool *selected, bool saveprio)
     startup = false;  //remove startup flag so we don't enter this block again
     applog(LOG_NOTICE, "Startup GPU initialization... Using settings from pool %s.", get_pool_name(pool));
 
-      if (pool_strategy == POOL_NORETRY) {
-        goto out;
-      }
-
     //set initial pool number for restart_mining_threads to prevent mismatched GPU settings
     init_pool = pool->pool_no;
 
@@ -5688,6 +5684,9 @@ static void *stratum_rthread(void *userdata)
       s = recv_line(pool);
     if (!s) {
       applog(LOG_NOTICE, "Stratum connection to %s interrupted", get_pool_name(pool));
+      if (pool_strategy == POOL_NORETRY) {
+        goto out;
+      }
       pool->getfail_occasions++;
       total_go++;
 
